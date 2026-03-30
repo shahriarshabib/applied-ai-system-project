@@ -66,13 +66,13 @@ The scheduler checks for conflicts *after* placing tasks rather than preventing 
 
 I used AI tools at every phase of this project, but I made sure my role as the architect never disappeared — I directed the AI rather than letting it drive.
 
-- **Design brainstorming (Phase 1):** I described the four classes I had in mind to Copilot and asked it to produce a Mermaid.js UML diagram. I already knew what classes I needed — I used the AI to visualise the relationships quickly rather than draw the diagram by hand. The prompt that worked best for me was: *"Here are my four classes and their attributes — generate a class diagram showing relationships."* I then reviewed the output and adjusted the relationships myself.
+- **Design brainstorming (Phase 1):** I described the four classes I had in mind to Claude and asked it to produce a Mermaid.js UML diagram. I already knew what classes I neede I used the AI to visualise the relationships quickly rather than draw the diagram by hand. The prompt that worked best for me was: *"Here are my four classes and their attributes — generate a class diagram showing relationships."* I then reviewed the output and adjusted the relationships myself.
 
-- **Code scaffolding (Phase 2):** I used Copilot to fill in method stubs once I had already decided what each method should do. I found that specific prompts worked much better than vague ones. When I said *"Implement `generate_schedule()` so that fixed-time tasks are placed first, then flexible tasks fill remaining gaps in priority order"*, I got useful code. When I tried *"implement the scheduler"*, the result was overcomplicated and I had to rewrite it.
+- **Code scaffolding (Phase 2):** I used Claude to fill in method stubs once I had already decided what each method should do. I found that specific prompts worked much better than vague ones. When I said *"Implement `generate_schedule()` so that fixed-time tasks are placed first, then flexible tasks fill remaining gaps in priority order"*, I got useful code. When I tried *"implement the scheduler"*, the result was overcomplicated and I had to rewrite it.
 
-- **Algorithm review (Phases 3–4):** I used Copilot as a reviewer — I shared a completed method and asked *"What edge cases is this missing?"* This is where I caught that `detect_conflicts` was checking `Task` objects before times were assigned, which meant it would never find a conflict on flexible tasks. I spotted the flaw in the AI's logic and redesigned the method myself.
+- **Algorithm review (Phases 3–4):** I used Claude as a reviewer — I shared a completed method and asked *"What edge cases is this missing?"* This is where I caught that `detect_conflicts` was checking `Task` objects before times were assigned, which meant it would never find a conflict on flexible tasks. I spotted the flaw in the AI's logic and redesigned the method myself.
 
-- **Test generation (Phase 5):** I used Copilot to draft initial test stubs, but I noticed it only wrote happy-path tests. I had to specifically prompt for *"edge cases and failure modes"* to get tests like `test_filter_empty_input_returns_empty_list`. I also wrote several edge case tests myself after thinking through what could go wrong at runtime.
+- **Test generation (Phase 5):** I used Claude to draft initial test stubs, but I noticed it only wrote happy-path tests. I had to specifically prompt for *"edge cases and failure modes"* to get tests like `test_filter_empty_input_returns_empty_list`. I also wrote several edge case tests myself after thinking through what could go wrong at runtime.
 
 **b. Judgment and verification**
 
@@ -122,3 +122,30 @@ The scheduler is "greedy" — it places tasks in priority order without looking 
 **c. Key takeaway**
 
 The most important lesson was: **AI is a fast first-drafter, not a final architect.** AI could generate a working skeleton in minutes, but it consistently produced designs that were one level too shallow — missing `ScheduleEntry`, missing the `pet_name` stamp, operating conflict detection at the wrong stage. The value of the human role was not writing code faster than AI, but knowing *what questions to ask* to expose the gaps. The prompts that produced the best results were always the ones that started with a constraint or a failure scenario, not a feature request.
+
+---
+
+## 6. Bonus Challenges
+
+### Challenge 1 — Weighted Priority Scheduling
+
+I added a `weighted_score()` method to `Task` that computes a composite urgency score:
+
+```
+score = (priority.numeric() × 10) + type_weight + urgency_bonus
+```
+
+- `type_weight`: medication = 4, appointment = 3, feeding = 2, walk/grooming = 1, play = 0
+- `urgency_bonus`: overdue = +5, due within 2 hours = +3, due today = +1
+
+This means an overdue MEDIUM medication (score 29) outranks a non-urgent MEDIUM walk with no fixed time (score 21), which a pure priority ordering can't express. `Scheduler.sort_by_weighted_score()` uses this as the sort key, and `generate_schedule()` exposes a `use_weighted=True` flag. The Streamlit schedule tab has a "Smart weighted scheduling" checkbox to activate it.
+
+I designed this myself after asking AI: *"What factors beyond priority level should influence task urgency for a health-focused scheduler?"* The AI listed recency, health impact, and time sensitivity — I translated those into the three scoring components and wrote the implementation myself.
+
+### Challenge 2 — JSON Persistence
+
+I added `save_to_json()` and `load_from_json()` to `Owner`, plus `to_json_dict()` / `from_json_dict()` classmethods at each level (Task, Pet, Owner). I chose a custom dictionary conversion over a library like `marshmallow` because every class already had a `to_dict()` method — extending it to full-fidelity JSON was a natural step with no extra dependencies. The Streamlit app auto-loads `data.json` on startup and auto-saves after every mutation so closing the browser never loses data.
+
+### Challenge 4 — Professional UI Formatting
+
+I defined `TASK_TYPE_EMOJI` and `PRIORITY_BADGE` dictionaries at the top of `pawpal_system.py` so the CLI and Streamlit UI share the same constants. Task type icons (🍖 🦮 💊 🏥 ✂️ 🎾) appear in every table and dropdown. Priority levels use colour-coded dot badges (🔴 high, 🟡 medium, 🟢 low). The schedule table also shows each task's weighted score so the owner can see exactly why tasks were ordered the way they were.

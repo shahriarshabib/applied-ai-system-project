@@ -458,3 +458,104 @@ def test_recurring_task_no_base_time_spawns_relative_to_now():
     expected_low  = before + timedelta(hours=24)
     expected_high = after  + timedelta(hours=24)
     assert expected_low <= spawned.scheduled_time <= expected_high
+
+
+# ---------------------------------------------------------------------------
+# Challenge 1 — Weighted score tests
+# ---------------------------------------------------------------------------
+
+def test_weighted_score_overdue_exceeds_future():
+    """An overdue task should have a higher score than the same task due tomorrow."""
+    from datetime import timedelta
+    past   = datetime.now() - timedelta(hours=1)
+    future = datetime.now() + timedelta(days=2)
+    overdue = make_task(priority=Priority.MEDIUM, scheduled_time=past)
+    upcoming = make_task(priority=Priority.MEDIUM, scheduled_time=future)
+    assert overdue.weighted_score() > upcoming.weighted_score()
+
+
+def test_weighted_score_medication_beats_play_same_priority():
+    """A MEDIUM medication should outscore a MEDIUM play task (type weight)."""
+    from pawpal_system import TaskType
+    med  = Task("Meds", TaskType.MEDICATION, 5, Priority.MEDIUM)
+    play = Task("Play", TaskType.PLAY,       20, Priority.MEDIUM)
+    assert med.weighted_score() > play.weighted_score()
+
+
+def test_sort_by_weighted_score_orders_by_score_descending():
+    """
+    sort_by_weighted_score should place the highest-score task first.
+
+    An overdue MEDIUM medication (score = 20+4+5 = 29) outranks a non-overdue
+    MEDIUM walk with no fixed time (score = 20+1+0 = 21), demonstrating that
+    urgency and task-type weight can overturn a pure-priority ordering.
+    """
+    from datetime import timedelta
+    from pawpal_system import TaskType
+    owner = Owner("Jordan")
+    scheduler = Scheduler(owner)
+    # MEDIUM medication that is already overdue
+    overdue_med = Task("Meds", TaskType.MEDICATION, 5, Priority.MEDIUM,
+                       scheduled_time=datetime.now() - timedelta(hours=1))
+    # MEDIUM walk with no fixed time (no urgency bonus)
+    flexible_walk = Task("Walk", TaskType.WALK, 30, Priority.MEDIUM)
+    result = scheduler.sort_by_weighted_score([flexible_walk, overdue_med])
+    assert result[0].title == "Meds"
+
+
+# ---------------------------------------------------------------------------
+# Challenge 2 — JSON persistence tests
+# ---------------------------------------------------------------------------
+
+def test_save_and_load_roundtrip(tmp_path):
+    """Saving and loading an Owner should produce an identical object graph."""
+    owner = Owner("Jordan", available_start="07:00", available_end="21:00")
+    pet = make_pet("Mochi")
+    pet.add_task(make_task("Walk", duration=30, priority=Priority.HIGH))
+    owner.add_pet(pet)
+
+    path = tmp_path / "data.json"
+    owner.save_to_json(path)
+    loaded = Owner.load_from_json(path)
+
+    assert loaded.name == "Jordan"
+    assert loaded.available_start == "07:00"
+    assert len(loaded.pets) == 1
+    assert loaded.pets[0].name == "Mochi"
+    assert len(loaded.pets[0].tasks) == 1
+    assert loaded.pets[0].tasks[0].title == "Walk"
+    assert loaded.pets[0].tasks[0].priority == Priority.HIGH
+
+
+def test_save_preserves_task_id(tmp_path):
+    """Task UUIDs should survive a save/load roundtrip."""
+    owner = Owner("Jordan")
+    pet = make_pet()
+    task = make_task("Medication")
+    pet.add_task(task)
+    owner.add_pet(pet)
+    path = tmp_path / "data.json"
+    owner.save_to_json(path)
+    loaded = Owner.load_from_json(path)
+    assert loaded.pets[0].tasks[0].id == task.id
+
+
+def test_save_preserves_scheduled_time(tmp_path):
+    """ISO datetime round-trip should preserve scheduled_time to the second."""
+    from datetime import timedelta
+    owner = Owner("Jordan")
+    pet = make_pet()
+    t = datetime(2026, 6, 15, 10, 30, 0)
+    pet.add_task(make_task("Vet", scheduled_time=t))
+    owner.add_pet(pet)
+    path = tmp_path / "data.json"
+    owner.save_to_json(path)
+    loaded = Owner.load_from_json(path)
+    assert loaded.pets[0].tasks[0].scheduled_time == t
+
+
+def test_load_missing_file_raises():
+    """load_from_json on a nonexistent file should raise FileNotFoundError."""
+    import pytest
+    with pytest.raises(FileNotFoundError):
+        Owner.load_from_json("this_file_does_not_exist.json")

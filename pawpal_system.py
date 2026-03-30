@@ -12,10 +12,12 @@ Scheduler     : Builds and explains a daily care schedule.
 
 from __future__ import annotations
 
+import json
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
+from pathlib import Path
 from typing import Optional
 
 
@@ -43,6 +45,35 @@ class TaskType(str, Enum):
     OTHER = "other"
 
 
+# Emoji and priority badge constants used by both CLI and Streamlit UI
+TASK_TYPE_EMOJI: dict[TaskType, str] = {
+    TaskType.FEEDING:     "🍖",
+    TaskType.WALK:        "🦮",
+    TaskType.MEDICATION:  "💊",
+    TaskType.APPOINTMENT: "🏥",
+    TaskType.GROOMING:    "✂️",
+    TaskType.PLAY:        "🎾",
+    TaskType.OTHER:       "📌",
+}
+
+PRIORITY_BADGE: dict[Priority, str] = {
+    Priority.HIGH:   "🔴 high",
+    Priority.MEDIUM: "🟡 medium",
+    Priority.LOW:    "🟢 low",
+}
+
+# Type-weight bonus used by weighted_score() — reflects health importance
+_TYPE_WEIGHT: dict[TaskType, int] = {
+    TaskType.MEDICATION:  4,
+    TaskType.APPOINTMENT: 3,
+    TaskType.FEEDING:     2,
+    TaskType.WALK:        1,
+    TaskType.GROOMING:    1,
+    TaskType.PLAY:        0,
+    TaskType.OTHER:       0,
+}
+
+
 # ---------------------------------------------------------------------------
 # Task
 # ---------------------------------------------------------------------------
@@ -63,12 +94,51 @@ class Task:
     completed: bool = False
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
 
+    # ------------------------------------------------------------------
+    # Challenge 1 — Weighted priority score
+    # ------------------------------------------------------------------
+
+    def weighted_score(self, reference_time: Optional[datetime] = None) -> float:
+        """
+        Compute a composite urgency score for scheduling.
+
+        Score = (priority.numeric() * 10) + type_weight + urgency_bonus
+
+        urgency_bonus:
+          +5  task is already overdue
+          +3  scheduled within the next 2 hours
+          +1  scheduled later today
+           0  no fixed time / far future
+        """
+        ref = reference_time or datetime.now()
+        base = self.priority.numeric() * 10 + _TYPE_WEIGHT.get(self.task_type, 0)
+
+        if self.scheduled_time is None:
+            return float(base)
+
+        delta = self.scheduled_time - ref
+        total_seconds = delta.total_seconds()
+        if total_seconds < 0:
+            urgency = 5          # already overdue
+        elif total_seconds <= 7200:
+            urgency = 3          # due within 2 hours
+        elif delta.days == 0:
+            urgency = 1          # due later today
+        else:
+            urgency = 0
+
+        return float(base + urgency)
+
+    # ------------------------------------------------------------------
+    # Core task methods
+    # ------------------------------------------------------------------
+
     def mark_complete(self) -> Optional[Task]:
         """
         Mark this task as completed.
 
-        If the task is recurring, returns a new Task for the next occurrence
-        (caller is responsible for adding it to the pet).  Returns None otherwise.
+        If the task is recurring, returns a new Task for the next occurrence;
+        caller is responsible for adding it to the pet.  Returns None otherwise.
         """
         self.completed = True
         if self.is_recurring and self.recurrence_interval_hours is not None:
@@ -101,19 +171,58 @@ class Task:
         return base + timedelta(hours=self.recurrence_interval_hours)
 
     def to_dict(self) -> dict:
-        """Serialize to a plain dict suitable for Streamlit tables."""
+        """Serialize to a display dict suitable for Streamlit tables (times as HH:MM)."""
         return {
             "id": self.id,
+            "icon": TASK_TYPE_EMOJI.get(self.task_type, ""),
             "title": self.title,
             "type": self.task_type.value,
             "duration_min": self.duration_minutes,
-            "priority": self.priority.value,
+            "priority": PRIORITY_BADGE.get(self.priority, self.priority.value),
             "scheduled_time": self.scheduled_time.strftime("%H:%M") if self.scheduled_time else "",
             "recurring": self.is_recurring,
             "completed": self.completed,
             "pet": self.pet_name,
             "notes": self.notes,
         }
+
+    # ------------------------------------------------------------------
+    # Challenge 2 — JSON serialisation (full fidelity, ISO datetimes)
+    # ------------------------------------------------------------------
+
+    def to_json_dict(self) -> dict:
+        """Full-fidelity serialisation for JSON persistence."""
+        return {
+            "id": self.id,
+            "title": self.title,
+            "task_type": self.task_type.value,
+            "duration_minutes": self.duration_minutes,
+            "priority": self.priority.value,
+            "scheduled_time": self.scheduled_time.isoformat() if self.scheduled_time else None,
+            "is_recurring": self.is_recurring,
+            "recurrence_interval_hours": self.recurrence_interval_hours,
+            "notes": self.notes,
+            "pet_name": self.pet_name,
+            "completed": self.completed,
+        }
+
+    @classmethod
+    def from_json_dict(cls, data: dict) -> Task:
+        """Reconstruct a Task from a JSON-deserialised dict."""
+        return cls(
+            id=data["id"],
+            title=data["title"],
+            task_type=TaskType(data["task_type"]),
+            duration_minutes=data["duration_minutes"],
+            priority=Priority(data["priority"]),
+            scheduled_time=(datetime.fromisoformat(data["scheduled_time"])
+                            if data.get("scheduled_time") else None),
+            is_recurring=data.get("is_recurring", False),
+            recurrence_interval_hours=data.get("recurrence_interval_hours"),
+            notes=data.get("notes", ""),
+            pet_name=data.get("pet_name", ""),
+            completed=data.get("completed", False),
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -139,8 +248,8 @@ class Pet:
         """
         Mark a task complete by id.
 
-        If the task is recurring, automatically appends the next occurrence to
-        this pet's task list.  Returns True if the task was found.
+        If the task is recurring, automatically appends the next occurrence.
+        Returns True if the task was found.
         """
         for task in self.tasks:
             if task.id == task_id:
@@ -165,6 +274,29 @@ class Pet:
     def get_tasks_by_type(self, task_type: TaskType) -> list[Task]:
         """Return all tasks of the given type."""
         return [t for t in self.tasks if t.task_type == task_type]
+
+    # Challenge 2
+    def to_json_dict(self) -> dict:
+        """Serialise to a JSON-safe dict."""
+        return {
+            "name": self.name,
+            "species": self.species,
+            "age": self.age,
+            "breed": self.breed,
+            "tasks": [t.to_json_dict() for t in self.tasks],
+        }
+
+    @classmethod
+    def from_json_dict(cls, data: dict) -> Pet:
+        """Reconstruct a Pet (and its tasks) from a JSON-deserialised dict."""
+        pet = cls(
+            name=data["name"],
+            species=data["species"],
+            age=data["age"],
+            breed=data.get("breed", ""),
+        )
+        pet.tasks = [Task.from_json_dict(t) for t in data.get("tasks", [])]
+        return pet
 
 
 # ---------------------------------------------------------------------------
@@ -205,6 +337,42 @@ class Owner:
         end = datetime.strptime(self.available_end, fmt)
         return int((end - start).total_seconds() // 60)
 
+    # ------------------------------------------------------------------
+    # Challenge 2 — JSON persistence
+    # ------------------------------------------------------------------
+
+    def to_json_dict(self) -> dict:
+        """Serialise the full owner graph to a JSON-safe dict."""
+        return {
+            "name": self.name,
+            "available_start": self.available_start,
+            "available_end": self.available_end,
+            "pets": [p.to_json_dict() for p in self.pets],
+        }
+
+    @classmethod
+    def from_json_dict(cls, data: dict) -> Owner:
+        """Reconstruct an Owner (and all pets/tasks) from a JSON-deserialised dict."""
+        owner = cls(
+            name=data["name"],
+            available_start=data.get("available_start", "08:00"),
+            available_end=data.get("available_end", "20:00"),
+        )
+        for pet_data in data.get("pets", []):
+            owner.pets.append(Pet.from_json_dict(pet_data))
+        return owner
+
+    def save_to_json(self, path: str | Path = "data.json") -> None:
+        """Persist the owner, pets, and tasks to a JSON file."""
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(self.to_json_dict(), f, indent=2)
+
+    @classmethod
+    def load_from_json(cls, path: str | Path = "data.json") -> Owner:
+        """Load an Owner from a JSON file created by save_to_json()."""
+        with open(path, encoding="utf-8") as f:
+            return cls.from_json_dict(json.load(f))
+
 
 # ---------------------------------------------------------------------------
 # ScheduleEntry
@@ -221,15 +389,17 @@ class ScheduleEntry:
     reason: str = ""
 
     def to_dict(self) -> dict:
-        """Serialize to a plain dict suitable for Streamlit tables."""
+        """Serialize to a display dict suitable for Streamlit tables."""
         return {
+            "icon": TASK_TYPE_EMOJI.get(self.task.task_type, ""),
             "pet": self.pet_name,
             "task": self.task.title,
             "type": self.task.task_type.value,
-            "priority": self.task.priority.value,
+            "priority": PRIORITY_BADGE.get(self.task.priority, self.task.priority.value),
             "start": self.start_time.strftime("%H:%M"),
             "end": self.end_time.strftime("%H:%M"),
             "duration_min": self.task.duration_minutes,
+            "score": round(self.task.weighted_score(), 1),
             "reason": self.reason,
         }
 
@@ -256,13 +426,26 @@ class Scheduler:
         """
         Return tasks sorted by scheduled_time ascending.
 
-        Tasks with no scheduled_time are placed at the end (treated as datetime.max).
+        Tasks with no scheduled_time are placed at the end.
         Within the same time bucket, higher-priority tasks come first.
         """
         return sorted(
             tasks,
             key=lambda t: (t.scheduled_time or datetime.max, -t.priority.numeric()),
         )
+
+    def sort_by_weighted_score(self, tasks: list[Task],
+                                reference_time: Optional[datetime] = None) -> list[Task]:
+        """
+        Challenge 1 — Sort tasks by composite weighted score (descending).
+
+        Score combines priority level, task-type health importance, and urgency
+        (how soon or overdue the task is).  This produces smarter orderings than
+        pure priority — e.g. an overdue MEDIUM medication outranks a non-urgent
+        HIGH play session.
+        """
+        ref = reference_time or datetime.now()
+        return sorted(tasks, key=lambda t: -t.weighted_score(ref))
 
     def filter_tasks(
         self,
@@ -300,13 +483,14 @@ class Scheduler:
                 conflicts.append((a, b))
         return conflicts
 
-    def generate_schedule(self, date: Optional[datetime] = None) -> list[ScheduleEntry]:
+    def generate_schedule(self, date: Optional[datetime] = None,
+                          use_weighted: bool = False) -> list[ScheduleEntry]:
         """
         Build a day plan for the given date.
 
-        Fixed-time tasks are placed at their scheduled_time; remaining tasks
-        are slotted sequentially after the last placed task, in priority order.
-        Tasks that exceed the owner's available window are skipped.
+        Fixed-time tasks are placed at their scheduled_time; flexible tasks
+        are slotted in priority order (or weighted-score order when
+        use_weighted=True).  Tasks that exceed the available window are skipped.
         """
         today = (date or datetime.now()).replace(hour=0, minute=0, second=0, microsecond=0)
         fmt = "%H:%M"
@@ -315,7 +499,11 @@ class Scheduler:
         window_end = datetime.strptime(self.owner.available_end, fmt).replace(
             year=today.year, month=today.month, day=today.day)
 
-        all_tasks = self.sort_by_priority(self.owner.get_all_tasks())
+        pending = [t for t in self.owner.get_all_tasks() if not t.completed]
+        if use_weighted:
+            all_tasks = self.sort_by_weighted_score(pending)
+        else:
+            all_tasks = self.sort_by_priority(pending)
 
         fixed: list[Task] = []
         flexible: list[Task] = []
@@ -339,13 +527,12 @@ class Scheduler:
                     start_time=start,
                     end_time=end,
                     reason=f"Fixed appointment at {start.strftime('%H:%M')} "
-                           f"({task.priority.value} priority)",
+                           f"({task.priority.value} priority, score {task.weighted_score():.0f})",
                 ))
 
         # Slot flexible tasks into remaining time
         cursor = window_start
         for task in flexible:
-            # Advance cursor past any fixed entry that occupies this slot
             for entry in sorted(entries, key=lambda e: e.start_time):
                 if entry.start_time < cursor + timedelta(minutes=task.duration_minutes) \
                         and entry.end_time > cursor:
@@ -353,7 +540,7 @@ class Scheduler:
 
             end = cursor + timedelta(minutes=task.duration_minutes)
             if end > window_end:
-                continue  # doesn't fit — skip
+                continue
 
             entries.append(ScheduleEntry(
                 pet_name=task.pet_name,
@@ -361,7 +548,7 @@ class Scheduler:
                 start_time=cursor,
                 end_time=end,
                 reason=f"Scheduled at {cursor.strftime('%H:%M')} "
-                       f"({task.priority.value} priority)",
+                       f"({task.priority.value} priority, score {task.weighted_score():.0f})",
             ))
             cursor = end
 
@@ -374,10 +561,12 @@ class Scheduler:
             return "No schedule generated yet. Call generate_schedule() first."
         lines = [f"=== Daily Schedule for {self.owner.name} ===\n"]
         for entry in self._schedule:
+            emoji = TASK_TYPE_EMOJI.get(entry.task.task_type, "")
             lines.append(
                 f"  {entry.start_time.strftime('%H:%M')} - {entry.end_time.strftime('%H:%M')} "
-                f"| [{entry.task.priority.value.upper()}] {entry.task.title} "
-                f"({entry.pet_name}, {entry.task.duration_minutes} min)"
+                f"| [{entry.task.priority.value.upper()}] {emoji} {entry.task.title} "
+                f"({entry.pet_name}, {entry.task.duration_minutes} min, "
+                f"score {entry.task.weighted_score():.0f})"
             )
             if entry.reason:
                 lines.append(f"    -> {entry.reason}")

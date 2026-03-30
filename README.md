@@ -34,6 +34,17 @@ Your final app should:
 - **Schedule explanation** — Every slot includes a plain-English reason ("Scheduled at 09:00 — high priority") so the owner understands why the plan looks the way it does.
 - **Overdue tracking** — The sidebar flags tasks whose scheduled time has passed and that haven't been completed.
 
+## Bonus Features
+
+### Weighted Priority Scheduling (Challenge 1)
+Tasks are scored on three factors: **priority level** (10 pts per tier), **health importance** (medication +4, appointment +3, feeding +2, walk +1), and **urgency** (overdue +5, due within 2 h +3, due today +1). This lets the scheduler recognise that an overdue medication is more urgent than a non-urgent high-priority play session. Toggle "Smart weighted scheduling" in the Schedule tab to activate it.
+
+### JSON Persistence (Challenge 2)
+All owner, pet, and task data is auto-saved to `data.json` after every change and auto-loaded on startup — no manual save button needed. Implemented via `Owner.save_to_json()` / `Owner.load_from_json()` using custom `to_json_dict()` / `from_json_dict()` methods at each class level.
+
+### Emoji & Priority Badges (Challenge 4)
+Task types have icons (🍖 🦮 💊 🏥 ✂️ 🎾 📌) and priority levels use colour-coded badges (🔴 high / 🟡 medium / 🟢 low) in every table, dropdown, and task card. Constants are defined once in `pawpal_system.py` and shared by both the CLI and Streamlit UI.
+
 ## Smarter Scheduling
 
 PawPal+ goes beyond a simple to-do list with four algorithmic features:
