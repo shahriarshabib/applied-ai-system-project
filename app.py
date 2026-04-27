@@ -210,41 +210,52 @@ with tab_tasks:
         if not owner.pets:
             st.info("Add a pet first.")
         else:
-            with st.form("add_task_form"):
-                pet_choice   = st.selectbox("Assign to pet",
-                                            [p.name for p in owner.pets])
-                task_title   = st.text_input("Task title", value="Morning walk")
-                col1, col2   = st.columns(2)
-                with col1:
-                    task_type    = st.selectbox(
-                        "Type",
-                        [t.value for t in TaskType],
-                        format_func=lambda v: f"{TASK_TYPE_EMOJI.get(TaskType(v), '')} {v}",
-                    )
-                    priority_val = st.selectbox(
-                        "Priority",
-                        [p.value for p in Priority],
-                        index=1,
-                        format_func=lambda v: PRIORITY_BADGE.get(Priority(v), v),
-                    )
-                with col2:
-                    duration  = st.number_input("Duration (min)", min_value=1,
-                                                max_value=480, value=20)
-                    has_time  = st.checkbox("Fixed time? (EST)")
-                    if has_time:
-                        st.caption("Time (EST)")
-                        _th = st.selectbox("Hour",  list(range(1, 13)), key="th")
-                        _tm = st.selectbox("Minute", [0, 15, 30, 45],   key="tm")
-                        _ta = st.selectbox("AM/PM",  ["AM", "PM"],       key="ta")
-                        task_hhmm = to_24h(_th, _tm, _ta)
-                    else:
-                        task_hhmm = None
-                is_recurring = st.checkbox("Recurring?")
-                recur_hours  = st.number_input("Repeat every N hours", min_value=1,
-                                               max_value=168, value=24,
-                                               disabled=not is_recurring)
-                notes     = st.text_input("Notes (optional)")
-                add_task  = st.form_submit_button("Add task", use_container_width=True)
+            # NOTE: intentionally not using st.form() here. Conditional
+            # widgets (e.g. the time selectors that appear when "Fixed
+            # time?" is checked, and the disabled-state of "Repeat every
+            # N hours") need to react on each click, but inside a form
+            # widget values are frozen until submission.
+            pet_choice = st.selectbox("Assign to pet",
+                                      [p.name for p in owner.pets],
+                                      key="add_pet_choice")
+            task_title = st.text_input("Task title", value="Morning walk",
+                                       key="add_task_title")
+            col1, col2 = st.columns(2)
+            with col1:
+                task_type = st.selectbox(
+                    "Type",
+                    [t.value for t in TaskType],
+                    format_func=lambda v: f"{TASK_TYPE_EMOJI.get(TaskType(v), '')} {v}",
+                    key="add_task_type",
+                )
+                priority_val = st.selectbox(
+                    "Priority",
+                    [p.value for p in Priority],
+                    index=1,
+                    format_func=lambda v: PRIORITY_BADGE.get(Priority(v), v),
+                    key="add_priority",
+                )
+            with col2:
+                duration = st.number_input("Duration (min)", min_value=1,
+                                           max_value=480, value=20,
+                                           key="add_duration")
+                has_time = st.checkbox("Fixed time? (EST)", key="add_has_time")
+                if has_time:
+                    st.caption("Time (EST)")
+                    _th = st.selectbox("Hour",   list(range(1, 13)), key="th")
+                    _tm = st.selectbox("Minute", [0, 15, 30, 45],    key="tm")
+                    _ta = st.selectbox("AM/PM",  ["AM", "PM"],       key="ta")
+                    task_hhmm = to_24h(_th, _tm, _ta)
+                else:
+                    task_hhmm = None
+            is_recurring = st.checkbox("Recurring?", key="add_recurring")
+            recur_hours = st.number_input("Repeat every N hours", min_value=1,
+                                          max_value=168, value=24,
+                                          disabled=not is_recurring,
+                                          key="add_recur_hours")
+            notes = st.text_input("Notes (optional)", key="add_notes")
+            add_task = st.button("Add task", use_container_width=True,
+                                 key="add_task_btn")
 
             if add_task:
                 scheduled_time = None
