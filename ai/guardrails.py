@@ -16,7 +16,7 @@ import json
 import logging
 import re
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -177,7 +177,7 @@ class Guardrails:
     def log_event(self, event: str, payload: dict[str, Any]) -> None:
         """Append one JSON line describing an agent event."""
         record = {
-            "ts": datetime.utcnow().isoformat() + "Z",
+            "ts": datetime.now(timezone.utc).isoformat(),
             "event": event,
             **payload,
         }

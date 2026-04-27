@@ -66,12 +66,15 @@ _INTENT_PATTERNS: list[tuple[str, str]] = [
                         r"create (a |an )?task|need to (walk|feed|medicate|groom)|"
                         r"remind me to|schedule (a |an )?(walk|feeding|medication|"
                         r"grooming|appointment|play))\b"),
-    ("feeding_q",       r"\b(feed|feeding|food|meal|hungry|appetite|how much (should|to))\b"),
-    ("walking_q",       r"\b(walk|walking|exercise|run|tired|energy|hyper)\b"),
-    ("medication_q",    r"\b(medication|medicine|pill|dose|missed (a )?dose|antibiotic|insulin)\b"),
-    ("grooming_q",      r"\b(groom|brush|bath|nail|coat|fur|shed)\b"),
-    ("behavior_q",      r"\b(barking|aggressive|anxious|destructive|chewing|scratching|"
-                        r"biting|whining|crying|bored)\b"),
+    ("feeding_q",       r"\b(feed|feeding|feeds|food|meal|meals|hungry|appetite|"
+                        r"how much (should|to))\b"),
+    ("walking_q",       r"\b(walk|walks|walking|exercise|run|running|tired|energy|hyper)\b"),
+    ("medication_q",    r"\b(medication|medicine|pill|pills|dose|doses|missed (a )?dose|"
+                        r"antibiotic|insulin)\b"),
+    ("grooming_q",      r"\b(groom|grooming|brush|brushes|brushing|bath|bathing|nail|"
+                        r"nails|coat|fur|shed|shedding)\b"),
+    ("behavior_q",      r"\b(bark|barks|barking|aggressive|anxious|destructive|chewing|"
+                        r"scratching|biting|whining|crying|bored)\b"),
 ]
 
 

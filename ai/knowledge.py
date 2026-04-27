@@ -39,6 +39,21 @@ _STOPWORDS: set[str] = {
 _TOKEN_RE = re.compile(r"[a-zA-Z][a-zA-Z\-']+")
 
 
+# Lightweight topic aliases per source file — used by KnowledgeBase.retrieve()
+# to disambiguate when the same proper noun appears in multiple documents.
+# Kept tiny on purpose: this is *not* a synonym engine, just enough hints to
+# steer obvious queries to the right doc.
+_FILENAME_ALIASES: dict[str, set[str]] = {
+    "feeding.md":      {"feed", "feeding", "food", "meal", "diet", "appetite", "hungry", "eat", "eating"},
+    "walking.md":      {"walk", "walking", "exercise", "run", "running", "leash"},
+    "medication.md":   {"medication", "medicine", "pill", "dose", "antibiotic", "insulin", "prescription"},
+    "grooming.md":     {"groom", "grooming", "brush", "brushing", "bath", "bathing", "nail", "coat", "fur", "shed", "shedding"},
+    "emergency.md":    {"emergency", "poison", "toxic", "seizure", "bleeding", "collapse", "choking"},
+    "behavior.md":     {"bark", "barking", "anxious", "anxiety", "aggressive", "destructive", "chewing", "lethargic", "lethargy"},
+    "general_care.md": {"routine", "schedule", "daily", "stimulation", "enrichment", "boredom"},
+}
+
+
 def _tokenize(text: str) -> list[str]:
     """Lowercase, drop punctuation/numbers, drop stopwords. Keeps domain words."""
     return [t for t in (m.group(0).lower() for m in _TOKEN_RE.finditer(text))
@@ -154,19 +169,44 @@ class KnowledgeBase:
         Return the top-``k`` chunks for ``query``, filtered to those with
         cosine similarity >= ``min_score``.
 
-        ``min_score`` exists so a wildly off-topic query ("write me a poem")
-        returns an empty list, which the agent treats as "I don't know" —
-        a guardrail against hallucinating outside the knowledge base.
+        Final score is ``cosine(query, chunk_body) + 0.15 * heading_bonus``,
+        where ``heading_bonus`` is the fraction of query tokens that appear
+        in the chunk's section heading or source filename. This biases
+        retrieval toward chunks whose *topic* matches the query — important
+        when a single keyword (e.g. "Shiba Inu") appears in multiple docs
+        but the user clearly asked about one of them ("How often should I
+        BRUSH my Shiba Inu?" should hit grooming.md, not walking.md).
+
+        ``min_score`` exists so a wildly off-topic query returns an empty
+        list, which the agent treats as "I don't know" — a guardrail against
+        hallucinating outside the knowledge base.
         """
         q_tokens = _tokenize(query)
         if not q_tokens:
             return []
+        q_token_set = set(q_tokens)
         q_vec = self._vectorize(q_tokens)
 
-        scored = [
-            (self._cosine(q_vec, vec), idx)
-            for idx, vec in enumerate(self._chunk_vectors)
-        ]
+        scored: list[tuple[float, int]] = []
+        for idx, vec in enumerate(self._chunk_vectors):
+            chunk = self.chunks[idx]
+            base = self._cosine(q_vec, vec)
+
+            # Heading bonus: how many query tokens appear in the section name.
+            heading_tokens = set(_tokenize(chunk.section))
+            heading_overlap = len(q_token_set & heading_tokens)
+            heading_bonus = (heading_overlap / len(q_token_set)) if q_token_set else 0.0
+
+            # Filename bonus: covers the case where the query's intent verb
+            # (e.g. "brush") matches the document topic (grooming.md). We
+            # store an alias map here rather than per-document metadata so
+            # the index stays a single in-memory structure.
+            filename_alias = _FILENAME_ALIASES.get(chunk.source, set())
+            filename_bonus = 1.0 if (q_token_set & filename_alias) else 0.0
+
+            final = base + 0.15 * heading_bonus + 0.10 * filename_bonus
+            scored.append((final, idx))
+
         scored.sort(reverse=True)
 
         results: list[RetrievalResult] = []
