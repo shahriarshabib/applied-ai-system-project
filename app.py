@@ -444,14 +444,6 @@ with tab_ai:
         data_path=DATA_FILE,
     )
 
-    info_col, _ = st.columns([3, 1])
-    with info_col:
-        st.caption(
-            f"LLM backend: `{st.session_state.ai_llm.name}` &nbsp;|&nbsp; "
-            f"Knowledge: {len(st.session_state.ai_kb.chunks)} chunks "
-            f"from {len({c.source for c in st.session_state.ai_kb.chunks})} documents"
-        )
-
     # Quick-start prompts so a grader can demo the system in one click.
     st.markdown("**Try a sample question:**")
     sample_cols = st.columns(3)
