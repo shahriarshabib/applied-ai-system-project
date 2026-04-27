@@ -39,19 +39,14 @@ component; this Module 5 project adds one.
 
 ## 🎬 Demo walkthrough
 
-📹 **Video walkthrough (YouTube):** [Watch the end-to-end demo](https://www.youtube.com/watch?v=YOUR_VIDEO_ID)
+📹 **Video walkthrough (YouTube):** [Watch the end-to-end demo](https://youtu.be/niAksKYGw9s)
 
-[![PawPal+ Care Advisor demo](https://img.youtube.com/vi/YOUR_VIDEO_ID/hqdefault.jpg)](https://www.youtube.com/watch?v=YOUR_VIDEO_ID)
+[![PawPal+ Care Advisor demo](https://img.youtube.com/vi/niAksKYGw9s/hqdefault.jpg)](https://youtu.be/niAksKYGw9s)
 
 The video shows an end-to-end run of the system with three live inputs
 (a care question, an emergency, and an "add task" proposal), the
 guardrail refusing an off-topic prompt, and the eval harness printing
 its 10/10 reliability report.
-
-> **For the author:** when your YouTube upload is live, do a global
-> find-and-replace of `YOUR_VIDEO_ID` in this file with the 11-character
-> ID from your video's URL (the part after `?v=`), then commit and push.
-> Both the link and the auto-generated thumbnail will start working.
 
 If you'd rather run it yourself in 10 seconds:
 
