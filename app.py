@@ -444,7 +444,9 @@ with tab_ai:
         data_path=DATA_FILE,
     )
 
-    # Quick-start prompts so a grader can demo the system in one click.
+    # Quick-start prompts. A click here submits the query directly — this
+    # avoids the Streamlit pitfall where setting ``value=`` on a text_area
+    # that already has a ``key`` is ignored on subsequent reruns.
     st.markdown("**Try a sample question:**")
     sample_cols = st.columns(3)
     samples = [
@@ -452,14 +454,13 @@ with tab_ai:
         "Add a 30 minute walk for my dog this afternoon, medium priority.",
         "Help me plan today, I think my schedule has a conflict.",
     ]
+    query_to_run: str | None = None
     for col, sample in zip(sample_cols, samples):
         if col.button(sample, key=f"sample_{hash(sample)}", use_container_width=True):
-            st.session_state.ai_input_pending = sample
-            st.rerun()
+            query_to_run = sample
 
     user_text = st.text_area(
         "Ask the Care Advisor anything about pet care or your schedule:",
-        value=st.session_state.pop("ai_input_pending", ""),
         height=80,
         key="ai_input_box",
     )
@@ -471,9 +472,12 @@ with tab_ai:
         st.rerun()
 
     if asked and user_text.strip():
-        response = agent.ask(user_text.strip())
+        query_to_run = user_text.strip()
+
+    if query_to_run:
+        response = agent.ask(query_to_run)
         st.session_state.ai_history.append({
-            "query": user_text.strip(),
+            "query": query_to_run,
             "response": response,
         })
         # If the agent proposed a task, surface it for owner approval before
