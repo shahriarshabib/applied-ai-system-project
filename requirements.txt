@@ -1,2 +1,8 @@
 streamlit>=1.30
 pytest>=7.0
+
+# The AI layer (ai/) intentionally has zero third-party dependencies.
+# - LLM client: stdlib only (urllib for the optional Ollama adapter)
+# - RAG retriever: stdlib only (math / re / collections)
+# - Knowledge base: plain markdown files in knowledge/
+# This keeps the system reproducible offline and on any Python 3.10+ env.

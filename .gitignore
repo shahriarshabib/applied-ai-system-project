@@ -3,3 +3,8 @@ __pycache__/
 .venv_new/
 .pytest_cache/
 .DS_Store
+
+# AI runtime artifacts
+logs/*.jsonl
+logs/*.log
+data.json
