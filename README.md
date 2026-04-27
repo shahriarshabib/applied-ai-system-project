@@ -276,6 +276,26 @@ unsafe output, missed escalation) has a named guardrail rule that
 either passes or fails. That property is what made this project
 possible to grade and reproduce without an API key.
 
+### What this project says about me as an AI engineer
+
+I think of AI features less as "drop in a model" and more as
+**systems with seams** — retrieval, planning, action, verification,
+and logging are separate components I can test, swap, and reason
+about independently. I chose a fully offline rule-based LLM not
+because it's the most fluent option, but because it forced me to
+own every step of the pipeline: I had to build my own intent
+classifier, my own TF-IDF retriever with heading and filename
+boosts, my own structured agent loop, and my own guardrail layer,
+and then prove they worked with 95 unit tests and a 10-scenario
+reliability harness. When the eval surfaced a real failure (the
+retriever ranking `walking.md` above `grooming.md` for a "brush my
+Shiba Inu" query, or internal author-notes leaking into user
+answers), I treated it as a system bug to instrument and fix, not
+prompt-engineering to hand-wave around. That instinct — favoring
+**observability, falsifiable tests, and the smallest model that
+clears the bar** over raw model power — is what I want a future
+employer to see in this repo.
+
 ---
 
 ## Repository Layout
