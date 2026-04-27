@@ -501,20 +501,67 @@ with tab_ai:
                     st.session_state.ai_pending_proposal = proposal
         st.rerun()
 
-    # If the agent has proposed a task, render the approval UI.
+    # If the agent has proposed a task, render an editable approval UI.
+    # The agent can leave fields blank or guess wrong (e.g. an unknown pet
+    # name); the owner reviews and edits before any state mutation.
     proposal = st.session_state.ai_pending_proposal
     if proposal:
         with st.container(border=True):
-            st.markdown("**Proposed task** — review and confirm before adding:")
-            st.json({k: v for k, v in proposal.items() if k != "icon"})
+            st.markdown("**Proposed task** — review, edit, and confirm before adding:")
+
+            pet_names = [p.name for p in owner.pets] or [""]
+            suggested_pet = proposal.get("pet_name", "") or ""
+            try:
+                pet_idx = pet_names.index(suggested_pet)
+            except ValueError:
+                pet_idx = 0
+
+            edit_pet = st.selectbox("Pet", pet_names, index=pet_idx,
+                                    key="proposal_pet")
+            edit_title = st.text_input("Title",
+                                       value=proposal.get("title", ""),
+                                       key="proposal_title")
+
+            type_values = [t.value for t in TaskType]
+            try:
+                type_idx = type_values.index(proposal.get("task_type", "other"))
+            except ValueError:
+                type_idx = type_values.index("other")
+            edit_type = st.selectbox("Type", type_values, index=type_idx,
+                                     key="proposal_type")
+
+            prio_values = [p.value for p in Priority]
+            try:
+                prio_idx = prio_values.index(proposal.get("priority", "medium"))
+            except ValueError:
+                prio_idx = prio_values.index("medium")
+            edit_priority = st.selectbox("Priority", prio_values, index=prio_idx,
+                                         key="proposal_priority")
+
+            edit_duration = st.number_input(
+                "Duration (min)", min_value=1, max_value=480,
+                value=int(proposal.get("duration_minutes", 30)),
+                key="proposal_duration",
+            )
+            edit_notes = st.text_input("Notes",
+                                       value=proposal.get("notes", ""),
+                                       key="proposal_notes")
+
             ok_col, no_col = st.columns(2)
             if ok_col.button("✅ Add to schedule", use_container_width=True):
-                if not proposal.get("pet_name"):
-                    st.warning("No pet was specified. Please mention a pet by name "
-                               "(e.g. 'Add a 30 minute walk for Mochi').")
-                elif agent.add_task_from_proposal(proposal):
+                edited = {
+                    "pet_name":         edit_pet,
+                    "title":            edit_title.strip() or "Untitled",
+                    "task_type":        edit_type,
+                    "priority":         edit_priority,
+                    "duration_minutes": int(edit_duration),
+                    "notes":            edit_notes,
+                }
+                if not edited["pet_name"]:
+                    st.warning("Please select a pet before adding the task.")
+                elif agent.add_task_from_proposal(edited):
                     save(owner)
-                    st.success(f"Added '{proposal['title']}' to {proposal['pet_name']}.")
+                    st.success(f"Added '{edited['title']}' to {edited['pet_name']}.")
                     st.session_state.ai_pending_proposal = None
                     st.rerun()
                 else:
