@@ -1,0 +1,77 @@
+%% PawPal+ Care Advisor — System Architecture
+%% Render with: https://mermaid.live  (paste this file's contents)
+%% Or:          mmdc -i assets/architecture.mmd -o assets/architecture.png
+flowchart TD
+    User[/"👤 Owner<br/>(Streamlit UI or CLI)"/]
+
+    subgraph AGENT["🤖 CareAdvisorAgent (ai/agent.py)"]
+        direction TB
+        S1["1. PARSE<br/><i>intent + input guardrail</i>"]
+        S2["2. RETRIEVE<br/><i>RAG over knowledge/</i>"]
+        S3["3. INSPECT<br/><i>read pet + schedule state</i>"]
+        S4["4. PLAN<br/><i>pick a tool</i>"]
+        S5["5. ACT<br/><i>call tool (no auto-mutate)</i>"]
+        S6["6. EXPLAIN<br/><i>compose grounded answer</i>"]
+        S7["7. VERIFY<br/><i>output guardrail + confidence</i>"]
+        S1 --> S2 --> S3 --> S4 --> S5 --> S6 --> S7
+    end
+
+    subgraph RAG["📚 RAG Layer (ai/knowledge.py)"]
+        direction TB
+        DOCS[["7 markdown docs<br/>knowledge/*.md"]]
+        IDX["TF-IDF index<br/>+ heading boost<br/>+ filename alias"]
+        DOCS --> IDX
+    end
+
+    subgraph TOOLS["🛠 Scheduler Tools (pawpal_system.py)"]
+        direction TB
+        T1["get_pet_info(name)"]
+        T2["get_schedule()"]
+        T3["check_conflicts()"]
+        T4["add_task(...)<br/>requires owner approval"]
+        T5["flag_emergency(reason)"]
+    end
+
+    subgraph LLM["🧠 LLM Client (ai/llm_client.py)"]
+        direction TB
+        LOCAL["LocalLLM<br/>rule-based, offline"]
+        OLLAMA["OllamaLLM<br/>optional, llama3.2"]
+    end
+
+    subgraph SAFETY["🛡 Guardrails + Logging (ai/guardrails.py)"]
+        direction TB
+        IN["Input checks:<br/>off-topic, injection,<br/>length, empty"]
+        OUT["Output checks:<br/>ungrounded, unsafe<br/>dosage, missing vet"]
+        LOG[["logs/agent.jsonl<br/>structured events"]]
+        IN --> LOG
+        OUT --> LOG
+    end
+
+    subgraph EVAL["🧪 Reliability (eval_harness.py)"]
+        SCENARIOS["10 scenarios<br/>intent · tools · sources<br/>keywords · confidence"]
+        REPORT[["Pass/fail report<br/>10/10 currently passing"]]
+        SCENARIOS --> REPORT
+    end
+
+    User -->|"natural-language query"| AGENT
+    AGENT -->|"final answer<br/>+ citations + confidence<br/>+ reasoning trace"| User
+    S1 -.guards.- IN
+    S2 -.queries.- IDX
+    S3 -.reads.- TOOLS
+    S5 -.calls.- TOOLS
+    S6 -.prompts.- LLM
+    S7 -.guards.- OUT
+    EVAL -.replays scenarios through.- AGENT
+
+    classDef agent fill:#e8f4fd,stroke:#3b82f6,stroke-width:2px,color:#0f172a
+    classDef rag   fill:#fef3c7,stroke:#d97706,stroke-width:2px,color:#0f172a
+    classDef tool  fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#0f172a
+    classDef llm   fill:#f3e8ff,stroke:#9333ea,stroke-width:2px,color:#0f172a
+    classDef safe  fill:#fee2e2,stroke:#dc2626,stroke-width:2px,color:#0f172a
+    classDef eval  fill:#e0e7ff,stroke:#4f46e5,stroke-width:2px,color:#0f172a
+    class AGENT,S1,S2,S3,S4,S5,S6,S7 agent
+    class RAG,DOCS,IDX rag
+    class TOOLS,T1,T2,T3,T4,T5 tool
+    class LLM,LOCAL,OLLAMA llm
+    class SAFETY,IN,OUT,LOG safe
+    class EVAL,SCENARIOS,REPORT eval
