@@ -245,6 +245,17 @@ class KnowledgeBase:
 # Markdown splitting
 # ---------------------------------------------------------------------------
 
+# Section headings that are author-facing meta-instructions to the AI
+# (e.g. "When the user reports X, the AI advisor should..."). These would
+# leak into user-facing answers if retrieved, so they're stripped at
+# index time.
+_META_HEADING_RE = re.compile(
+    r"(scheduling.+in pawpal\+|what pawpal\+|adjusting the pawpal\+|"
+    r"ai advisor should|pawpal\+ should)",
+    re.IGNORECASE,
+)
+
+
 def _split_markdown(path: Path) -> list[Chunk]:
     """
     Split a markdown file on ``##`` headings. Each section becomes one chunk.
@@ -252,7 +263,9 @@ def _split_markdown(path: Path) -> list[Chunk]:
 
     We deliberately do not chunk smaller than ``##`` sections — the docs
     were authored with retrieval in mind, and finer splits hurt recall on
-    short user queries.
+    short user queries. Sections whose heading matches ``_META_HEADING_RE``
+    are skipped entirely so internal AI instructions don't leak into
+    user-facing answers.
     """
     text = path.read_text(encoding="utf-8")
     lines = text.splitlines()
@@ -281,4 +294,5 @@ def _split_markdown(path: Path) -> list[Chunk]:
         sections.append((current_heading, "\n".join(buffer).strip()))
 
     return [Chunk(source=path.name, section=heading, text=body)
-            for heading, body in sections if body]
+            for heading, body in sections
+            if body and not _META_HEADING_RE.search(heading)]
